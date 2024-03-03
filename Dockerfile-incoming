@@ -1,0 +1,38 @@
+FROM ubuntu:latest
+
+# 設定語言與位置
+RUN apt-get update && apt-get install -y locales && \
+    sed -i '/zh_TW.UTF-8/s/^# //g' /etc/locale.gen && \
+    locale-gen
+
+# 設定postfix
+RUN echo "postfix postfix/mailname string example.com" | debconf-set-selections && \
+    echo "postfix postfix/main_mailer_type string 'Internet Site'" | debconf-set-selections && \
+    echo "courier-base courier-base/webadmin-configmode boolean true" | debconf-set-selections
+
+# 新增收信使用者
+ENV INCOMING_USER=incoming
+
+RUN useradd -m -s /bin/bash $INCOMING_USER && \
+    echo "$INCOMING_USER:$INCOMING_USER" | chpasswd && \
+    mkdir /home/$INCOMING_USER/Maildir && \
+    chown $INCOMING_USER:$INCOMING_USER /home/$INCOMING_USER/Maildir
+
+# 預先設置時區數據
+RUN echo "tzdata tzdata/Areas select Asia" | debconf-set-selections && \
+    echo "tzdata tzdata/Zones/Asia select Taipei" | debconf-set-selections
+
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata && \
+    apt-get install -y postfix mailutils courier-imap && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY postfix-config-with-incoming.sh /postfix-config.sh
+
+RUN chmod +x /postfix-config.sh
+
+EXPOSE 25
+
+EXPOSE 143
+
+CMD ["/postfix-config.sh"]
